@@ -1,7 +1,7 @@
 #[derive(Debug)]
 pub enum TwitchRecoverErrorKind {
     UrlParseStreamer,
-    UrlParseVideoId,
+    UrlParseVodId,
 
     Regex,
 
@@ -10,7 +10,7 @@ pub enum TwitchRecoverErrorKind {
     BadRequest(reqwest::Error),
     BadResponse,
 
-    NoValidUrlFound,
+    VodNotFound,
 }
 
 impl From<reqwest::Error> for TwitchRecoverErrorKind {
