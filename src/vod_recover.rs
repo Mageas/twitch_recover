@@ -116,7 +116,7 @@ impl<'a> VodRecover<'a> {
     pub async fn get_link(&self) -> Result<String, TwitchRecoverError> {
         let links = self.generate_links();
         let link = Self::find_valid_link(links).await?;
-        Ok(link.to_owned())
+        Ok(link)
     }
 
     /// Generate all the possible urls for a given vod

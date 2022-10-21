@@ -7,18 +7,45 @@ use crate::vod_recover::VodRecover;
 mod constants;
 use crate::constants::*;
 
+mod args;
+use args::Commands;
+use clap::Parser;
+
 mod utils;
 
 #[tokio::main]
 async fn main() -> TwitchRecoverResult {
-    let mut vod = VodRecover::from_url("https://twitchtracker.com/skyyart/streams/39967004696")?;
-    let mut vod = VodRecover::from_url("https://twitchtracker.com/zerator/streams/46124092796")?;
+    let args = args::Cli::parse();
 
-    vod.generate_timestamp_from_url().await?;
-    let link = vod.get_link().await?;
+    match args.commands {
+        Commands::Link(c) => {
+            let mut vod = VodRecover::from_url(&c.link)?;
 
-    dbg!(&vod);
-    dbg!(&link);
+            println!("Searching for {}", &c.link);
+
+            vod.generate_timestamp_from_url().await?;
+            let link = vod.get_link().await?;
+
+            println!("\nLink found:\n{}\n", &link);
+        }
+        Commands::Bulk(c) => {
+            let mut links = vec![];
+            for link in c.links {
+                let mut vod = VodRecover::from_url(&link)?;
+
+                println!("Searching for {}", &link);
+
+                vod.generate_timestamp_from_url().await?;
+                let link = vod.get_link().await?;
+
+                links.push(link);
+            }
+            println!("\nLinks found:");
+            for link in links {
+                println!("{}", &link);
+            }
+        }
+    }
 
     Ok(())
 }
