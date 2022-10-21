@@ -4,6 +4,9 @@ use crate::error::{TwitchRecoverError, TwitchRecoverErrorKind, TwitchRecoverResu
 mod vod_recover;
 use crate::vod_recover::VodRecover;
 
+mod vod_unmute;
+use crate::vod_unmute::VodUnmute;
+
 mod constants;
 use crate::constants::*;
 

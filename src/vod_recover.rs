@@ -73,7 +73,7 @@ impl<'a> VodRecover<'a> {
 
         if response.status() != 200 {
             return Err(TwitchRecoverError::new(
-                TwitchRecoverErrorKind::BadResponse,
+                TwitchRecoverErrorKind::StreamNotFound,
                 "Unable to find the stream".to_string(),
             ));
         }

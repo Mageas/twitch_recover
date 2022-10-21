@@ -8,7 +8,7 @@ pub enum TwitchRecoverErrorKind {
     UserAgent,
 
     BadRequest(reqwest::Error),
-    BadResponse,
+    StreamNotFound,
 
     VodNotFound,
 }
