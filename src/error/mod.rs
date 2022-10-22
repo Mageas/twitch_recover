@@ -1,7 +1,26 @@
-mod error_kind;
-mod error_type;
+use thiserror::Error;
 
-pub use self::error_kind::TwitchRecoverErrorKind;
-pub use self::error_type::TwitchRecoverError;
+#[derive(Error, Debug)]
+pub enum TwitchRecoverError {
+    #[error("streamer not found for {0}")]
+    UrlParseStreamer(String),
+    #[error("vod id not found for {0}")]
+    UrlParseVodId(String),
+
+    #[error("regex")]
+    Regex,
+
+    #[error("unable to select a user agent")]
+    UserAgent,
+
+    #[error("{0}")]
+    BadRequest(#[from] reqwest::Error),
+
+    #[error("stream not found")]
+    StreamNotFound,
+
+    #[error("vod not found")]
+    VodNotFound,
+}
 
 pub type TwitchRecoverResult<T = ()> = Result<T, TwitchRecoverError>;

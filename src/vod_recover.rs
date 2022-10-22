@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use crate::utils;
-use crate::{TwitchRecoverError, TwitchRecoverErrorKind, TwitchRecoverResult};
+use crate::{TwitchRecoverError, TwitchRecoverResult};
 
 #[derive(Debug)]
 pub struct VodRecover<'a> {
@@ -24,30 +24,15 @@ impl<'a> VodRecover<'a> {
     /// Generate the VodRecover struct without a timestamp
     pub fn from_url(url: &'a str) -> Result<Self, TwitchRecoverError> {
         let streamer = match url.split("com/").nth(1) {
-            None => {
-                return Err(TwitchRecoverError::new(
-                    TwitchRecoverErrorKind::UrlParseStreamer,
-                    "Unable to parse the streamer from the Url".to_string(),
-                ))
-            }
+            None => return Err(TwitchRecoverError::UrlParseStreamer(url.to_owned())),
             Some(res) => match res.split('/').next() {
-                None => {
-                    return Err(TwitchRecoverError::new(
-                        TwitchRecoverErrorKind::UrlParseStreamer,
-                        "Unable to parse the streamer from the Url".to_string(),
-                    ))
-                }
+                None => return Err(TwitchRecoverError::UrlParseStreamer(url.to_owned())),
                 Some(streamer) => streamer,
             },
         };
 
         let vod_id = match url.split("streams/").nth(1) {
-            None => {
-                return Err(TwitchRecoverError::new(
-                    TwitchRecoverErrorKind::UrlParseVodId,
-                    "Unable to parse the vod id from the Url".to_string(),
-                ))
-            }
+            None => return Err(TwitchRecoverError::UrlParseVodId(url.to_owned())),
             Some(vod_id) => vod_id,
         };
 
@@ -72,10 +57,7 @@ impl<'a> VodRecover<'a> {
             .await?;
 
         if response.status() != 200 {
-            return Err(TwitchRecoverError::new(
-                TwitchRecoverErrorKind::StreamNotFound,
-                "Unable to find the stream".to_string(),
-            ));
+            return Err(TwitchRecoverError::StreamNotFound);
         }
 
         let page = response.text().await?;
@@ -85,21 +67,11 @@ impl<'a> VodRecover<'a> {
             .captures(&page)
         {
             Some(c) => c,
-            None => {
-                return Err(TwitchRecoverError::new(
-                    TwitchRecoverErrorKind::Regex,
-                    "Unable to parse the timestamp of the stream".to_string(),
-                ))
-            }
+            None => return Err(TwitchRecoverError::Regex),
         };
         let date = match capture.name("timestamp") {
             Some(g) => g,
-            None => {
-                return Err(TwitchRecoverError::new(
-                    TwitchRecoverErrorKind::Regex,
-                    "Unable to parse the timestamp of the stream".to_string(),
-                ))
-            }
+            None => return Err(TwitchRecoverError::Regex),
         };
 
         let date = page[date.start()..date.end()].to_string();
@@ -177,10 +149,7 @@ impl<'a> VodRecover<'a> {
             }
         }
 
-        Err(TwitchRecoverError::new(
-            TwitchRecoverErrorKind::VodNotFound,
-            "Unable to find the vod for the current link (if the vod is older than 60 days, it may be deleted)".to_string(),
-        ))
+        Err(TwitchRecoverError::VodNotFound)
     }
 
     /// Find a valid link in single thread
@@ -194,9 +163,6 @@ impl<'a> VodRecover<'a> {
                 return Ok(link);
             }
         }
-        Err(TwitchRecoverError::new(
-            TwitchRecoverErrorKind::VodNotFound,
-            "Unable to find the vod for the current link (if the vod is older than 60 days, it may be deleted)".to_string(),
-        ))
+        Err(TwitchRecoverError::VodNotFound)
     }
 }
