@@ -1,11 +1,11 @@
 mod error;
-use crate::error::{TwitchRecoverError, TwitchRecoverErrorKind, TwitchRecoverResult};
+use crate::error::{TwitchRecoverError, TwitchRecoverResult};
 
 mod vod_recover;
 use crate::vod_recover::VodRecover;
 
-mod vod_unmute;
-use crate::vod_unmute::VodUnmute;
+// mod vod_unmute;
+// use crate::vod_unmute::VodUnmute;
 
 mod constants;
 use crate::constants::*;
@@ -16,8 +16,10 @@ use clap::Parser;
 
 mod utils;
 
+use anyhow::{Context, Result};
+
 #[tokio::main]
-async fn main() -> TwitchRecoverResult {
+async fn main() -> Result<()> {
     let args = args::Cli::parse();
 
     match args.commands {
