@@ -22,18 +22,10 @@ pub struct VodRecover<'a> {
     timestamp: i64,
 }
 
-impl<'a> VodRecover<'_> {
-    /// Get the vod url
-    pub async fn get_url(&self) -> TwitchRecoverResult<String> {
-        let urls = self.generate_all_urls();
-        self.find_valid_url(urls).await
-    }
-}
-
 /// twitchtracker related section
-impl<'a> VodRecover<'_> {
+impl VodRecover<'_> {
     /// Create a VodRecover from a twitchtracker url
-    pub async fn from_twitchtracker(url: &'a str) -> TwitchRecoverResult<VodRecover> {
+    pub async fn from_twitchtracker(url: &str) -> TwitchRecoverResult<VodRecover> {
         let ParsedTwitchTrackerUrl(streamer, vod_id) = Self::parse_twitchtracker_url(url)?;
 
         let url = format!("https://twitchtracker.com/{}/streams/{}", streamer, vod_id);
@@ -49,7 +41,7 @@ impl<'a> VodRecover<'_> {
     }
 
     /// Parse the twitchtracker url
-    fn parse_twitchtracker_url(url: &'a str) -> TwitchRecoverResult<ParsedTwitchTrackerUrl> {
+    fn parse_twitchtracker_url(url: &str) -> TwitchRecoverResult<ParsedTwitchTrackerUrl> {
         let streamer = match url.split("com/").nth(1) {
             None => return Err(TwitchRecoverError::UrlParseStreamer(url.to_owned())),
             Some(res) => match res.split('/').next() {
@@ -89,8 +81,26 @@ impl<'a> VodRecover<'_> {
     }
 }
 
+/// Manual related section
+impl<'a> VodRecover<'a> {
+    /// Manually recover a vod with a streamer name, vod is and a timestamp
+    pub fn from_manual(streamer: &'a str, vod_id: &'a str, timestamp: i64) -> VodRecover {
+        Self {
+            streamer,
+            vod_id,
+            timestamp,
+        }
+    }
+}
+
 /// Urls related section
-impl<'a> VodRecover<'_> {
+impl VodRecover<'_> {
+    /// Get the vod url
+    pub async fn get_url(&self) -> TwitchRecoverResult<String> {
+        let urls = self.generate_all_urls();
+        self.find_valid_url(urls).await
+    }
+
     /// Generate all the possible urls
     fn generate_all_urls(&self) -> Vec<String> {
         let mut urls = vec![];
