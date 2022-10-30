@@ -14,7 +14,7 @@ anyhow = "1.0"
 
 ``` rust
 let vod = VodRecover::from_twitchtracker("https://twitchtracker.com/streamer_name/streams/stream_id").await.unwrap();
-let url = vod.get_url().await.context("Unable to find a valid url")?;
+let url = vod.get_url().await.unwrap();
 println!("{}", url);
 ```
 
@@ -27,7 +27,7 @@ let timestamp = NaiveDateTime::parse_from_str(date, "%Y-%m-%d %H:%M")
     .timestamp();
      
 let vod = VodRecover::from_manual("streamer_name", "stream_id", timestamp);
-let url = vod.get_url().await.context("Unable to find a valid url")?;
+let url = vod.get_url().await.unwrap();
 println!("{}", url);
 ```
 

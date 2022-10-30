@@ -32,7 +32,7 @@ impl VodRecover<'_> {
     ///
     /// ```no_run
     /// let vod = VodRecover::from_twitchtracker("https://twitchtracker.com/streamer_name/streams/stream_id").await.unwrap();
-    /// let url = vod.get_url().await.context("Unable to find a valid url")?;
+    /// let url = vod.get_url().await.unwrap();
     /// println!("{}", url);
     /// ```
     pub async fn from_twitchtracker(url: &str) -> TwitchRecoverResult<VodRecover> {
@@ -104,7 +104,7 @@ impl<'a> VodRecover<'a> {
     ///     .timestamp();
     ///     
     /// let vod = VodRecover::from_manual("streamer_name", "stream_id", timestamp);
-    /// let url = vod.get_url().await.context("Unable to find a valid url")?;
+    /// let url = vod.get_url().await.unwrap();
     /// println!("{}", url);
     /// ```
     pub fn from_manual(streamer: &'a str, vod_id: &'a str, timestamp: i64) -> VodRecover {
