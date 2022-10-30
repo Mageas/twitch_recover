@@ -11,10 +11,14 @@ use regex::Regex;
 use crate::utils::request;
 use crate::{TwitchRecoverError, TwitchRecoverResult};
 
-/// Represent a parsed twitchtracker url
+/// # Represent a parsed twitchtracker url
+///
+/// The first field is the *streamer* and the second is the *vod_id*
 struct ParsedTwitchTrackerUrl<'a>(&'a str, &'a str);
 
-/// Struct representing a VOD
+/// # Struct representing a VOD
+///
+/// It is composed of a *streamer*, a *video_id*, and a *timestamp*
 #[derive(Debug)]
 pub struct VodRecover<'a> {
     streamer: &'a str,
@@ -24,7 +28,13 @@ pub struct VodRecover<'a> {
 
 /// twitchtracker related section
 impl VodRecover<'_> {
-    /// Create a VodRecover from a twitchtracker url
+    /// # Create a VodRecover from a twitchtracker url
+    ///
+    /// ```no_run
+    /// let vod = VodRecover::from_twitchtracker("https://twitchtracker.com/streamer_name/streams/stream_id").await.unwrap();
+    /// let url = vod.get_url().await.context("Unable to find a valid url")?;
+    /// println!("{}", url);
+    /// ```
     pub async fn from_twitchtracker(url: &str) -> TwitchRecoverResult<VodRecover> {
         let ParsedTwitchTrackerUrl(streamer, vod_id) = Self::parse_twitchtracker_url(url)?;
 
@@ -83,7 +93,20 @@ impl VodRecover<'_> {
 
 /// Manual related section
 impl<'a> VodRecover<'a> {
-    /// Manually recover a vod with a streamer name, vod is and a timestamp
+    /// # Manually recover a vod
+    ///
+    /// Recover with a streamer name, vod is and a timestamp
+    ///
+    /// ```no_run
+    /// let date = "2022-10-29 13:06";
+    /// let timestamp = NaiveDateTime::parse_from_str(date, "%Y-%m-%d %H:%M")
+    ///     .unwrap()
+    ///     .timestamp();
+    ///     
+    /// let vod = VodRecover::from_manual("streamer_name", "stream_id", timestamp);
+    /// let url = vod.get_url().await.context("Unable to find a valid url")?;
+    /// println!("{}", url);
+    /// ```
     pub fn from_manual(streamer: &'a str, vod_id: &'a str, timestamp: i64) -> VodRecover {
         Self {
             streamer,
