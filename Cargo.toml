@@ -1,6 +1,6 @@
 [package]
 name = "twitch_recover"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 authors = ["Mageas <dev@mageas.net>"]
 description = "Recover a twitch vod"
