@@ -1,28 +1,55 @@
-use regex::Regex;
-
-use reqwest::header::USER_AGENT;
-
-use chrono::naive::NaiveDateTime;
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 use crypto::digest::Digest;
 use crypto::sha1::Sha1;
 
-use std::sync::{Arc, Mutex};
-use std::thread;
+use chrono::naive::NaiveDateTime;
 
-use crate::utils;
+use regex::Regex;
+
+use crate::utils::request;
 use crate::{TwitchRecoverError, TwitchRecoverResult};
 
+/// Represent a parsed twitchtracker url
+struct ParsedTwitchTrackerUrl<'a>(&'a str, &'a str);
+
+/// Struct representing a VOD
 #[derive(Debug)]
 pub struct VodRecover<'a> {
-    vod_id: &'a str,
     streamer: &'a str,
-    timestamp: Option<i64>,
+    vod_id: &'a str,
+    timestamp: i64,
 }
 
-impl<'a> VodRecover<'a> {
-    /// Generate the VodRecover struct without a timestamp
-    pub fn from_url(url: &'a str) -> Result<Self, TwitchRecoverError> {
+impl<'a> VodRecover<'_> {
+    /// Get the vod url
+    pub async fn get_url(&self) -> TwitchRecoverResult<String> {
+        let urls = self.generate_all_urls();
+        self.find_valid_url(urls).await
+    }
+}
+
+/// twitchtracker related section
+impl<'a> VodRecover<'_> {
+    /// Create a VodRecover from a twitchtracker url
+    pub async fn from_twitchtracker(url: &'a str) -> TwitchRecoverResult<VodRecover> {
+        let ParsedTwitchTrackerUrl(streamer, vod_id) = Self::parse_twitchtracker_url(url)?;
+
+        let url = format!("https://twitchtracker.com/{}/streams/{}", streamer, vod_id);
+
+        let page = request(&url).await?;
+        let timestamp = Self::parse_twitchtracker_timestamp(page, &url)?;
+
+        Ok(VodRecover {
+            streamer,
+            vod_id,
+            timestamp,
+        })
+    }
+
+    /// Parse the twitchtracker url
+    fn parse_twitchtracker_url(url: &'a str) -> TwitchRecoverResult<ParsedTwitchTrackerUrl> {
         let streamer = match url.split("com/").nth(1) {
             None => return Err(TwitchRecoverError::UrlParseStreamer(url.to_owned())),
             Some(res) => match res.split('/').next() {
@@ -36,42 +63,21 @@ impl<'a> VodRecover<'a> {
             Some(vod_id) => vod_id,
         };
 
-        Ok(Self {
-            vod_id,
-            streamer,
-            timestamp: None,
-        })
+        Ok(ParsedTwitchTrackerUrl(streamer, vod_id))
     }
 
-    /// Generate the timestamp
-    pub async fn generate_timestamp_from_url(&mut self) -> TwitchRecoverResult {
-        let header = utils::get_random_header()?;
-        let client = reqwest::Client::new();
-        let response = client
-            .get(format!(
-                "https://twitchtracker.com/{}/streams/{}",
-                self.streamer, self.vod_id
-            ))
-            .header(USER_AGENT, header)
-            .send()
-            .await?;
-
-        if response.status() != 200 {
-            return Err(TwitchRecoverError::StreamNotFound);
-        }
-
-        let page = response.text().await?;
-
+    /// Parse the timestamp from the twitchtracker page
+    fn parse_twitchtracker_timestamp(page: String, url: &str) -> TwitchRecoverResult<i64> {
         let capture = match Regex::new(r"(stream-timestamp-dt.+>(?P<timestamp>.+)<)")
             .unwrap()
             .captures(&page)
         {
             Some(c) => c,
-            None => return Err(TwitchRecoverError::Regex),
+            None => return Err(TwitchRecoverError::PageParseTimestamp(url.to_owned())),
         };
         let date = match capture.name("timestamp") {
             Some(g) => g,
-            None => return Err(TwitchRecoverError::Regex),
+            None => return Err(TwitchRecoverError::PageParseTimestamp(url.to_owned())),
         };
 
         let date = page[date.start()..date.end()].to_string();
@@ -79,61 +85,55 @@ impl<'a> VodRecover<'a> {
             .unwrap()
             .timestamp();
 
-        self.timestamp = Some(timestamp);
-
-        Ok(())
+        Ok(timestamp)
     }
+}
 
-    /// Get the link of the vod
-    pub async fn get_link(&self) -> Result<String, TwitchRecoverError> {
-        let links = self.generate_links();
-        let link = Self::find_valid_link(links).await?;
-        Ok(link)
-    }
-
-    /// Generate all the possible urls for a given vod
-    fn generate_links(&self) -> Vec<String> {
-        let mut links = vec![];
+/// Urls related section
+impl<'a> VodRecover<'_> {
+    /// Generate all the possible urls
+    fn generate_all_urls(&self) -> Vec<String> {
+        let mut urls = vec![];
         for sec in 0..60 {
-            let timestamp = self.timestamp.unwrap() + sec;
-            let base_link = format!("{}_{}_{}", self.streamer, self.vod_id, timestamp);
+            let timestamp = self.timestamp + sec;
+            let base_url = format!("{}_{}_{}", self.streamer, self.vod_id, timestamp);
 
             let mut hasher = Sha1::new();
-            hasher.input_str(&base_link);
-            let hashed_base_link = hasher.result_str();
+            hasher.input_str(&base_url);
+            let hashed_base_url = hasher.result_str();
 
             for domain in crate::DOMAINS {
-                links.push(format!(
+                urls.push(format!(
                     "{}{}_{}/chunked/index-dvr.m3u8",
                     domain,
-                    hashed_base_link[..20].to_owned(),
-                    base_link
+                    hashed_base_url[..20].to_owned(),
+                    base_url
                 ));
             }
         }
-        links
+        urls
     }
 
-    /// Find a valid link in multi thread
-    async fn find_valid_link(links: Vec<String>) -> Result<String, TwitchRecoverError> {
-        let link_len = links.len();
+    /// Find a valid url
+    async fn find_valid_url(&self, urls: Vec<String>) -> TwitchRecoverResult<String> {
+        let url_len = urls.len();
         let domains_len = crate::DOMAINS.len();
-        let shared_links = Arc::new(links);
+        let shared_urls = Arc::new(urls);
 
-        let valid_link: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+        let valid_url: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
 
-        for link_offset in 0..(link_len / domains_len) {
+        for url_offset in 0..(url_len / domains_len) {
             let mut joinhandles = Vec::new();
             for domain_offset in 0..domains_len {
-                let child_links = shared_links.clone();
-                let child_valid_link = valid_link.clone();
-                joinhandles.push(thread::spawn(move || -> Result<(), TwitchRecoverError> {
-                    let link = &child_links[domain_offset * link_offset];
-                    let response = reqwest::blocking::get(link)?;
+                let child_urls = shared_urls.clone();
+                let child_valid_url = valid_url.clone();
+                joinhandles.push(thread::spawn(move || -> TwitchRecoverResult {
+                    let url = &child_urls[domain_offset * url_offset];
+                    let response = reqwest::blocking::get(url)?;
 
                     if response.status() == 200 {
-                        let mut guard = child_valid_link.lock().unwrap();
-                        *guard = Some(link.to_owned());
+                        let mut guard = child_valid_url.lock().unwrap();
+                        *guard = Some(url.to_owned());
                     }
                     Ok(())
                 }));
@@ -142,27 +142,13 @@ impl<'a> VodRecover<'a> {
             for handle in joinhandles.into_iter() {
                 handle.join().unwrap()?;
 
-                let guard = valid_link.lock().unwrap();
+                let guard = valid_url.lock().unwrap();
                 if let Some(ref v) = *guard {
                     return Ok(v.to_owned());
                 }
             }
         }
 
-        Err(TwitchRecoverError::VodNotFound)
-    }
-
-    /// Find a valid link in single thread
-    async fn find_valid_link_sg(links: Vec<String>) -> Result<String, TwitchRecoverError> {
-        let client = reqwest::Client::new();
-        for link in links {
-            let header = utils::get_random_header()?;
-            let response = client.get(&link).header(USER_AGENT, header).send().await?;
-
-            if response.status() == 200 {
-                return Ok(link);
-            }
-        }
         Err(TwitchRecoverError::VodNotFound)
     }
 }
