@@ -2,8 +2,12 @@
 name = "twitch_recover"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+authors = ["Mageas <dev@mageas.net>"]
+description = "Recover a twitch vod"
+documentation = "https://docs.rs/twitch_recover"
+keywords = ["twitch"]
+license = "GPLv3"
+repository = "https://gitea.heartnerds.org/Mageas/twitch_recover"
 
 [dependencies]
 thiserror = "1.0.37"
