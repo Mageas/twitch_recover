@@ -107,7 +107,7 @@ impl<'a> VodRecover<'a> {
     /// let url = vod.get_url().await.unwrap();
     /// println!("{}", url);
     /// ```
-    pub fn from_manual(streamer: &'a str, vod_id: &'a str, timestamp: i64) -> VodRecover {
+    pub fn from_manual(streamer: &'a str, vod_id: &'a str, timestamp: i64) -> VodRecover<'a> {
         Self {
             streamer,
             vod_id,
