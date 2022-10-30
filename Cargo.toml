@@ -6,7 +6,7 @@ authors = ["Mageas <dev@mageas.net>"]
 description = "Recover a twitch vod"
 documentation = "https://docs.rs/twitch_recover"
 keywords = ["twitch"]
-license = "GPLv3"
+license = "GPL-3.0"
 repository = "https://gitea.heartnerds.org/Mageas/twitch_recover"
 
 [dependencies]
