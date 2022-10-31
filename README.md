@@ -4,7 +4,7 @@ This crate allows you to recover a twitch vod.
 
 ``` toml
 [dependencies]
-anyhow = "0.1.0"
+twitch_recover = "0.1"
 ```
 <br>
 
