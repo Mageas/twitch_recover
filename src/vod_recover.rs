@@ -30,10 +30,16 @@ pub struct VodRecover<'a> {
 impl VodRecover<'_> {
     /// # Create a VodRecover from a twitchtracker url
     ///
-    /// ```no_run
-    /// let vod = VodRecover::from_twitchtracker("https://twitchtracker.com/streamer_name/streams/stream_id").await.unwrap();
-    /// let url = vod.get_url().await.unwrap();
-    /// println!("{}", url);
+    /// ## Examples
+    ///
+    /// ```
+    /// # use twitch_recover::VodRecover;
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let url = "https://twitchtracker.com/streamer_name/streams/stream_id";
+    /// let vod = VodRecover::from_twitchtracker(url).await;
+    /// # assert!(vod.is_err());
+    /// # }
     /// ```
     pub async fn from_twitchtracker(url: &str) -> TwitchRecoverResult<VodRecover> {
         let ParsedTwitchTrackerUrl(streamer, vod_id) = Self::parse_twitchtracker_url(url)?;
@@ -97,15 +103,21 @@ impl<'a> VodRecover<'a> {
     ///
     /// Recover with a streamer name, vod is and a timestamp
     ///
-    /// ```no_run
+    /// ## Examples
+    ///
+    /// ```
+    /// # use twitch_recover::VodRecover;
+    /// use chrono::naive::NaiveDateTime;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// let date = "2022-10-29 13:06";
     /// let timestamp = NaiveDateTime::parse_from_str(date, "%Y-%m-%d %H:%M")
     ///     .unwrap()
     ///     .timestamp();
     ///     
     /// let vod = VodRecover::from_manual("streamer_name", "stream_id", timestamp);
-    /// let url = vod.get_url().await.unwrap();
-    /// println!("{}", url);
+    /// # }
     /// ```
     pub fn from_manual(streamer: &'a str, vod_id: &'a str, timestamp: i64) -> VodRecover<'a> {
         Self {
@@ -116,12 +128,69 @@ impl<'a> VodRecover<'a> {
     }
 }
 
+/// # Options for a vod
+///
+/// ## Examples
+///
+/// ```
+/// # use twitch_recover::VodRecoverOptions;
+/// let options = VodRecoverOptions {
+///     ..Default::default()
+/// };
+/// # assert_eq!(options.chunck, 17);
+/// ```
+///
+/// ```
+/// # use twitch_recover::VodRecoverOptions;
+/// let options = VodRecoverOptions::new(100);
+/// # assert_eq!(options.chunck, 100);
+/// ```
+#[derive(Debug)]
+pub struct VodRecoverOptions {
+    /// How many concurrent requests
+    pub chunck: usize,
+}
+
+impl VodRecoverOptions {
+    /// New VodRecoverOptions
+    pub fn new(chunck: usize) -> Self {
+        Self { chunck }
+    }
+}
+
+impl Default for VodRecoverOptions {
+    /// Default value for VodRecoverOptions
+    fn default() -> Self {
+        Self {
+            chunck: crate::DOMAINS.len(),
+        }
+    }
+}
+
 /// Urls related section
 impl VodRecover<'_> {
     /// Get the vod url
-    pub async fn get_url(&self) -> TwitchRecoverResult<String> {
+    pub async fn get_url(&self, options: &VodRecoverOptions) -> TwitchRecoverResult<String> {
         let urls = self.generate_all_urls();
-        self.find_valid_url(urls).await
+        let urls = Self::split_urls_in_chunks(urls, options.chunck);
+        Self::find_valid_url(urls).await
+    }
+
+    /// Split urls into chunks
+    fn split_urls_in_chunks(urls: Vec<String>, chunck: usize) -> Vec<Vec<String>> {
+        let mut output = vec![];
+        let mut output_chunck = vec![];
+        for url in urls {
+            output_chunck.push(url);
+            if output_chunck.len() == chunck {
+                output.push(output_chunck);
+                output_chunck = vec![];
+            }
+        }
+        if !output_chunck.is_empty() {
+            output.push(output_chunck);
+        }
+        output
     }
 
     /// Generate all the possible urls
@@ -148,20 +217,18 @@ impl VodRecover<'_> {
     }
 
     /// Find a valid url
-    async fn find_valid_url(&self, urls: Vec<String>) -> TwitchRecoverResult<String> {
-        let url_len = urls.len();
-        let domains_len = crate::DOMAINS.len();
-        let shared_urls = Arc::new(urls);
-
+    async fn find_valid_url(urls: Vec<Vec<String>>) -> TwitchRecoverResult<String> {
         let valid_url: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
 
-        for url_offset in 0..(url_len / domains_len) {
+        for chunck in urls {
             let mut joinhandles = Vec::new();
-            for domain_offset in 0..domains_len {
-                let child_urls = shared_urls.clone();
+            let shared_chuck = Arc::new(chunck);
+
+            for offset in 0..shared_chuck.len() {
+                let child_chunck = shared_chuck.clone();
                 let child_valid_url = valid_url.clone();
                 joinhandles.push(thread::spawn(move || -> TwitchRecoverResult {
-                    let url = &child_urls[domain_offset * url_offset];
+                    let url = &child_chunck[offset];
                     let response = reqwest::blocking::get(url)?;
 
                     if response.status() == 200 {
@@ -183,5 +250,67 @@ impl VodRecover<'_> {
         }
 
         Err(TwitchRecoverError::VodNotFound)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_twitchtracker_url() {
+        let url = "https://twitchtracker.com/streamer_name/streams/10000000";
+        let ParsedTwitchTrackerUrl(streamer, vod_id) =
+            VodRecover::parse_twitchtracker_url(url).unwrap();
+
+        assert_eq!(streamer, "streamer_name");
+        assert_eq!(vod_id, "10000000");
+    }
+
+    #[test]
+    #[should_panic]
+    fn fail_streamer_name_parse_twitchtracker_url() {
+        let url = "https://twitchtracker.cstreamer_name/streams/10000000";
+        VodRecover::parse_twitchtracker_url(url).unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn fail_vod_id_parse_twitchtracker_url() {
+        let url = "https://twitchtracker.cstreamer_name/stre10000000";
+        VodRecover::parse_twitchtracker_url(url).unwrap();
+    }
+
+    #[test]
+    fn test_parse_twitchtracker_timestamp() {
+        let page =
+            r#"...<div class=\"stream-timestamp-dt to-dowdatetime\">2022-10-30 14:57:02</div>..."#
+                .to_string();
+        let timestamp = VodRecover::parse_twitchtracker_timestamp(page, "").unwrap();
+
+        assert_eq!(timestamp, 1667141822);
+    }
+
+    #[test]
+    fn test_split_urls_in_chunks() {
+        let urls = vec!["".to_string(); 7];
+        let chunks = VodRecover::split_urls_in_chunks(urls, 3);
+
+        assert_eq!(chunks[0].len(), 3);
+        assert_eq!(chunks[1].len(), 3);
+        assert_eq!(chunks[2].len(), 1);
+    }
+
+    #[test]
+    fn test_generate_all_urls() {
+        let vod = VodRecover {
+            streamer: "streamer_name",
+            vod_id: "vod_id",
+            timestamp: 100000,
+        };
+        let urls = vod.generate_all_urls();
+
+        assert_eq!(urls.first().unwrap(), "https://vod-secure.twitch.tv/6fc3cda1d80cf7bf6b72_streamer_name_vod_id_100000/chunked/index-dvr.m3u8");
+        assert_eq!(urls.last().unwrap(), "https://d3aqoihi2n8ty8.cloudfront.net/8a03f89d58f01a4b5539_streamer_name_vod_id_100059/chunked/index-dvr.m3u8");
     }
 }
